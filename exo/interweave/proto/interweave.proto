@@ -1,0 +1,311 @@
+// Interweave Protocol - Backend-Agnostic Distributed Inference
+//
+// This protocol enables heterogeneous compute clusters to participate
+// in the same inference pipeline regardless of their underlying backend
+// (tinygrad, llama.cpp, mlx, etc.)
+
+syntax = "proto3";
+
+package interweave;
+
+// =============================================================================
+// Core Tensor Format
+// =============================================================================
+
+// Universal Tensor representation that can be converted to any backend format
+message UniversalTensorProto {
+    // Raw tensor data in row-major layout
+    bytes data = 1;
+
+    // Tensor dimensions (e.g., [1, 4096, 8192])
+    repeated int32 shape = 2;
+
+    // Canonical dtype: 'f32', 'f16', 'bf16', 'i8', 'i4'
+    string dtype = 3;
+
+    // Memory layout: 'row_major' (C-order) or 'col_major' (Fortran)
+    string layout = 4;
+
+    // Device hint for optimal placement: 'cuda', 'metal', 'cpu', 'any'
+    string device_hint = 5;
+
+    // Quantization parameters (for i8, i4 dtypes)
+    optional float scale = 6;
+    optional int32 zero_point = 7;
+
+    // Optional compression: 'none', 'zlib', 'lz4'
+    string compression = 8;
+}
+
+// =============================================================================
+// Shard Definition
+// =============================================================================
+
+// Extended shard with backend preferences
+message InterweaveShardProto {
+    // Base shard info (compatible with exo)
+    string model_id = 1;
+    int32 start_layer = 2;
+    int32 end_layer = 3;
+    int32 n_layers = 4;
+
+    // Interweave extensions
+    repeated string preferred_backends = 5;   // Priority-ordered backend names
+    optional string required_dtype = 6;       // Force specific dtype
+    int64 memory_estimate = 7;                // Bytes needed for this shard
+    float compute_intensity = 8;              // Relative compute weight (1.0 = average)
+
+    // Layer classification
+    bool is_embedding = 9;      // True if contains embedding layer
+    bool is_output = 10;        // True if contains lm_head/output layer
+    bool requires_kv_cache = 11;// True if attention layers need state
+}
+
+// =============================================================================
+// KV-Cache State
+// =============================================================================
+
+// Key-Value cache entry for a single layer
+message KVCacheEntry {
+    UniversalTensorProto key = 1;
+    UniversalTensorProto value = 2;
+}
+
+// Complete inference state that travels with tensors
+message InterweaveStateProto {
+    // Request identifier
+    string request_id = 1;
+
+    // Current position in generated sequence
+    int32 sequence_position = 2;
+
+    // KV-cache: layer_index -> (K, V) tensors
+    map<int32, KVCacheEntry> kv_cache = 3;
+
+    // Optional attention mask
+    optional UniversalTensorProto attention_mask = 4;
+
+    // Optional position IDs
+    optional UniversalTensorProto position_ids = 5;
+
+    // Backend-specific metadata (JSON-encoded)
+    string metadata_json = 6;
+}
+
+// =============================================================================
+// Backend Capabilities
+// =============================================================================
+
+// What a backend can do
+message BackendCapabilities {
+    string name = 1;                    // e.g., 'tinygrad_cuda', 'llama_cpp'
+    string device_type = 2;             // 'cuda', 'metal', 'cpu'
+    repeated string supported_dtypes = 3;
+    string preferred_dtype = 4;
+    int32 max_batch_size = 5;
+    int32 max_sequence_length = 6;
+    bool supports_kv_cache = 7;
+    bool supports_streaming = 8;
+    int64 memory_available = 9;         // Bytes
+    double estimated_flops = 10;        // TFLOPS
+}
+
+// Node capabilities (one node may have multiple backends)
+message NodeCapabilities {
+    string node_id = 1;
+    repeated BackendCapabilities backends = 2;
+    int64 total_memory = 3;             // Total system memory
+    double network_bandwidth = 4;       // Mbps
+    int32 ping_latency_ms = 5;          // RTT in ms
+}
+
+// =============================================================================
+// Forward Pass Messages
+// =============================================================================
+
+// Request to execute forward pass
+message ForwardRequest {
+    // Which shard to execute
+    InterweaveShardProto shard = 1;
+
+    // Input tensor(s)
+    UniversalTensorProto input = 2;
+
+    // Optional state (KV-cache, etc.)
+    optional InterweaveStateProto state = 3;
+
+    // Request tracking
+    string request_id = 4;
+
+    // Preferred backend (hint, may be overridden)
+    string preferred_backend = 5;
+
+    // Response options
+    bool return_hidden_states = 6;      // Return intermediate activations
+    bool stream_tokens = 7;             // Enable token streaming
+}
+
+// Response from forward pass
+message ForwardResponse {
+    // Output tensor
+    UniversalTensorProto output = 1;
+
+    // Updated state (if KV-cache was used)
+    optional InterweaveStateProto updated_state = 2;
+
+    // Which backend actually executed
+    string backend_used = 3;
+
+    // Performance metrics
+    float inference_time_ms = 4;
+    int64 memory_used_bytes = 5;
+
+    // Optional hidden states (if requested)
+    repeated UniversalTensorProto hidden_states = 6;
+
+    // Error information
+    optional string error_message = 7;
+}
+
+// Streaming forward response (for token-by-token generation)
+message StreamForwardResponse {
+    // Partial output tensor (usually single token logits)
+    UniversalTensorProto partial_output = 1;
+
+    // Token position in sequence
+    int32 token_position = 2;
+
+    // Is this the final token?
+    bool is_finished = 3;
+
+    // Cumulative inference time
+    float elapsed_time_ms = 4;
+}
+
+// =============================================================================
+// Routing and Discovery
+// =============================================================================
+
+// Request to find nodes capable of handling a shard
+message RouteQueryRequest {
+    InterweaveShardProto shard = 1;
+    int64 memory_required = 2;
+    string preferred_device_type = 3;   // 'cuda', 'metal', 'cpu', 'any'
+}
+
+message RouteQueryResponse {
+    // Nodes capable of handling the shard, scored by preference
+    repeated RouteCandidate candidates = 1;
+}
+
+message RouteCandidate {
+    string node_id = 1;
+    string backend_name = 2;
+    int32 score = 3;                    // Higher = better
+    int32 estimated_latency_ms = 4;
+    int64 available_memory = 5;
+}
+
+// Register node capabilities
+message RegisterNodeRequest {
+    NodeCapabilities capabilities = 1;
+    string address = 2;                 // gRPC endpoint (host:port)
+}
+
+message RegisterNodeResponse {
+    bool success = 1;
+    string assigned_node_id = 2;
+}
+
+// Health check with capabilities
+message InterweaveHealthRequest {
+    bool include_capabilities = 1;
+}
+
+message InterweaveHealthResponse {
+    bool is_healthy = 1;
+    optional NodeCapabilities capabilities = 2;
+    int64 uptime_seconds = 3;
+    int32 active_requests = 4;
+}
+
+// =============================================================================
+// Topology Management
+// =============================================================================
+
+// Request cluster topology
+message GetTopologyRequest {
+    int32 max_depth = 1;                // How many hops to traverse
+}
+
+message GetTopologyResponse {
+    // All known nodes and their capabilities
+    map<string, NodeCapabilities> nodes = 1;
+
+    // Adjacency: node_id -> list of connected peer node_ids
+    map<string, NodePeers> adjacency = 2;
+
+    // Network metrics between nodes
+    repeated NetworkMetric network_metrics = 3;
+}
+
+message NodePeers {
+    repeated string peer_ids = 1;
+}
+
+message NetworkMetric {
+    string from_node = 1;
+    string to_node = 2;
+    int32 latency_ms = 3;
+    double bandwidth_mbps = 4;
+}
+
+// =============================================================================
+// Generation API (High-Level)
+// =============================================================================
+
+// Request for text generation
+message GenerateRequest {
+    string model_id = 1;
+    string prompt = 2;
+    int32 max_tokens = 3;
+    float temperature = 4;
+    float top_p = 5;
+    int32 top_k = 6;
+    string request_id = 7;
+    bool stream = 8;
+}
+
+message GenerateResponse {
+    string generated_text = 1;
+    int32 tokens_generated = 2;
+    float total_time_ms = 3;
+    repeated string backends_used = 4;  // Which backends participated
+    bool is_finished = 5;
+}
+
+// =============================================================================
+// Service Definition
+// =============================================================================
+
+service InterweaveService {
+    // Core forward pass (tensor-level)
+    rpc Forward(ForwardRequest) returns (ForwardResponse);
+
+    // Streaming forward pass
+    rpc StreamForward(ForwardRequest) returns (stream StreamForwardResponse);
+
+    // High-level generation
+    rpc Generate(GenerateRequest) returns (GenerateResponse);
+    rpc StreamGenerate(GenerateRequest) returns (stream GenerateResponse);
+
+    // Routing and discovery
+    rpc QueryRoute(RouteQueryRequest) returns (RouteQueryResponse);
+    rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse);
+
+    // Topology
+    rpc GetTopology(GetTopologyRequest) returns (GetTopologyResponse);
+
+    // Health
+    rpc HealthCheck(InterweaveHealthRequest) returns (InterweaveHealthResponse);
+}
