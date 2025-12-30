@@ -254,7 +254,7 @@ class BackendRegistry:
     def _check_cuda(cls) -> bool:
         """Check if CUDA is available"""
         try:
-            # Try nvidia-smi
+            # Try nvidia-smi (most reliable)
             import subprocess
             result = subprocess.run(
                 ['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
@@ -267,10 +267,18 @@ class BackendRegistry:
             pass
 
         try:
-            # Try tinygrad
+            # Try tinygrad CUDA device explicitly
             from tinygrad import Device
-            if 'CUDA' in Device.DEFAULT or 'GPU' in Device.DEFAULT:
+            # Only check for explicit CUDA, not generic GPU
+            if 'CUDA' in Device.DEFAULT:
                 return True
+            # Check if CUDA device exists
+            try:
+                cuda_dev = Device['CUDA']
+                if cuda_dev is not None:
+                    return True
+            except Exception:
+                pass
         except ImportError:
             pass
 
