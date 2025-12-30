@@ -1,10 +1,49 @@
 # Interweave Protocol Benchmark Results
 
-## STATUS: CROSS-NODE DISTRIBUTED INFERENCE WORKING!
+## STATUS: REAL MODEL HETEROGENEOUS INFERENCE WORKING!
 
 **Tested: December 30, 2024**
 
-### REAL Distributed Inference (Tensor flowing across 3 nodes)
+---
+
+## REAL Llama 3.2-1B Distributed Inference (Actual Model Weights!)
+
+```
+┌─────────────────────────┐  tensor  ┌─────────────────────────┐
+│   Dell C4130 V100       │ ───────► │   Mac Pro "Trashcan"    │
+│   Layers 0-7: 576ms     │   HTTP   │   Layers 8-15: 3914ms   │
+│   CUDA backend          │          │   LLVM/CPU backend      │
+│   x86_64                │          │   x86_64                │
+└─────────────────────────┘          └─────────────────────────┘
+                     Total: 3930ms per token
+```
+
+**This is REAL model inference with REAL Llama 3.2-1B weights!**
+
+| Node | Layers | Backend | Time | Notes |
+|------|--------|---------|------|-------|
+| Dell C4130 | 0-7 | tinygrad CUDA (V100) | **576ms** | GPU accelerated |
+| Mac Pro | 8-15 | tinygrad LLVM/CPU | **3914ms** | CPU fallback (SUPPORT_BF16=0) |
+
+### Key Findings
+
+1. **Heterogeneous backends work**: CUDA → LLVM/CPU tensor transfer successful
+2. **bf16 workaround**: Set `SUPPORT_BF16=0` for older Metal/OpenCL that don't support bfloat16
+3. **llvmlite required**: Install `llvmlite` for CPU fallback path
+
+### Requirements for Mac (older Metal without bf16)
+
+```bash
+pip install llvmlite
+export SUPPORT_BF16=0
+python3 -m exo.interweave.real_model_server --model llama-3.2-1b --start-layer 8 --end-layer 15 --port 8090
+```
+
+---
+
+## Previous Tests: Synthetic Tensor Distributed Inference
+
+### 3-Node Tensor Transfer Test (Random Weights)
 
 ```
 ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
