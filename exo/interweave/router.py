@@ -46,11 +46,14 @@ class PeerNode:
     capabilities: BackendCapabilities
     last_seen: float = 0.0
     latency_ms: float = 0.0
-    channel: Optional[grpc.aio.Channel] = None
-    stub: Optional[InterweaveServiceStub] = None
+    channel: Optional[Any] = None  # grpc.aio.Channel when available
+    stub: Optional[Any] = None  # InterweaveServiceStub when available
 
     async def connect(self) -> bool:
         """Establish gRPC connection to peer"""
+        if not GRPC_AVAILABLE:
+            logger.error("gRPC not available - cannot connect to peers")
+            return False
         try:
             self.channel = grpc.aio.insecure_channel(self.address)
             self.stub = InterweaveServiceStub(self.channel)
@@ -565,7 +568,7 @@ class InterweaveServiceImpl:
     async def Forward(
         self,
         request: ForwardRequest,
-        context: grpc.aio.ServicerContext,
+        context: Any,  # grpc.aio.ServicerContext
     ) -> ForwardResponse:
         """Handle incoming forward request"""
         self._active_requests += 1
@@ -627,7 +630,7 @@ class InterweaveServiceImpl:
     async def HealthCheck(
         self,
         request: 'InterweaveHealthRequest',
-        context: grpc.aio.ServicerContext,
+        context: Any,  # grpc.aio.ServicerContext
     ) -> 'InterweaveHealthResponse':
         """Handle health check request"""
         from .proto import InterweaveHealthResponse, NodeCapabilities, BackendCapabilities
