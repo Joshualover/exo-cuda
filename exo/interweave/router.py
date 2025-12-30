@@ -34,6 +34,16 @@ try:
 except ImportError:
     grpc = None
     GRPC_AVAILABLE = False
+    # Stub types for type hints when gRPC unavailable
+    ForwardRequest = None
+    ForwardResponse = None
+    RouteQueryRequest = None
+    RouteQueryResponse = None
+    RouteCandidate = None
+    InterweaveServiceStub = None
+    UniversalTensorProto = None
+    InterweaveShardProto = None
+    InterweaveStateProto = None
 
 logger = logging.getLogger(__name__)
 
