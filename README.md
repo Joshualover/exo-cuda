@@ -52,7 +52,15 @@ exo --inference-engine tinygrad --chatgpt-api-port 8001 --disable-tui
 ### Requirements
 - NVIDIA GPU with CUDA support
 - CUDA drivers installed
+- CUDA toolkit (`apt install nvidia-cuda-toolkit` on Ubuntu)
 - Python 3.10+
+
+### Verified Working (December 2024)
+Successfully tested on:
+- Dell PowerEdge C4130 with Tesla V100-SXM2-16GB
+- Dell PowerEdge C4130 with Tesla M40 24GB
+- Multi-node cluster over ethernet
+- Llama 3.2 1B inference working via tinygrad CUDA backend
 
 ---
 
