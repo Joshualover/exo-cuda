@@ -1,8 +1,12 @@
 # Interweave Protocol Benchmark Results
 
-## STATUS: WORKING
+## STATUS: PROTOCOL INFRASTRUCTURE WORKING
 
 **Tested: December 30, 2024**
+
+> **Note**: These benchmarks test the Interweave **protocol infrastructure** (tensor serialization,
+> backend detection, cross-platform compatibility) - NOT actual model inference.
+> Model inference tests coming next.
 
 ```
    _____ _______   __          ______  _____  _  _______ _
