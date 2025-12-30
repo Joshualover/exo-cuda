@@ -1,6 +1,28 @@
 # Interweave Protocol Benchmark Results
 
-Benchmarks run on 2024-12-30 across a heterogeneous 3-node cluster.
+## STATUS: WORKING
+
+**Tested: December 30, 2024**
+
+```
+   _____ _______   __          ______  _____  _  _______ _
+  |_   _|__   __| \ \        / / __ \|  __ \| |/ / ____| |
+    | |    | |     \ \  /\  / / |  | | |__) | ' / (___ | |
+    | |    | |      \ \/  \/ /| |  | |  _  /|  < \___ \| |
+   _| |_   | |       \  /\  / | |__| | | \ \| . \____) |_|
+  |_____|  |_|        \/  \/   \____/|_|  \_\_|\_\_____/(_)
+
+  Heterogeneous Distributed Inference Across 3 Architectures
+```
+
+All 3 nodes tested and passing:
+- **Dell C4130** (x86_64 + NVIDIA V100) - CUDA backend
+- **Mac Pro "Trashcan"** (x86_64 + AMD FirePro D500) - OpenCL backend
+- **IBM Power8** (ppc64le + 576GB RAM) - CPU backend (no gRPC required)
+
+---
+
+Benchmarks run across a heterogeneous 3-node cluster.
 
 ## Cluster Configuration
 
