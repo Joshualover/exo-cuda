@@ -314,10 +314,16 @@ def convert_from_huggingface(weights: Dict[str, Tensor], model: Transformer, n_h
 
 
 def fix_bf16(weights: Dict[Any, Tensor]):
+  # USE_FP32=1 forces everything to f32 for devices without fp16 support (e.g., older OpenCL like FirePro D500)
+  if getenv("USE_FP32", 0):
+    return {
+      k: (v.cast(dtypes.float32) if v.dtype in (dtypes.bfloat16, dtypes.float16) else v)
+      for k, v in weights.items()
+    }
   if Device.DEFAULT == "CLANG":
     # TODO: without casting to float16, 70B llama OOM on tinybox.
     return {
-      k: (v.llvm_bf16_cast(dtypes.float32).to(v.device) if v.dtype == dtypes.bfloat16 else v) 
+      k: (v.llvm_bf16_cast(dtypes.float32).to(v.device) if v.dtype == dtypes.bfloat16 else v)
       for k, v in weights.items()
     }
   if getenv("SUPPORT_BF16", 1):

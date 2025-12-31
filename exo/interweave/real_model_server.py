@@ -140,7 +140,14 @@ class RealModelNode:
             tensor_bytes = base64.b64decode(data['tensor'])
             input_tensor = UniversalTensor.deserialize(tensor_bytes)
             input_data = input_tensor.to_numpy()
-            print(f"[{self.node_id}] Forward: tensor shape={input_data.shape}")
+
+            # Convert to f32 if USE_FP32 is set (for devices without fp16 support like D500)
+            import os
+            if os.environ.get('USE_FP32', '0') == '1':
+                input_data = input_data.astype(np.float32)
+                print(f"[{self.node_id}] Forward: tensor shape={input_data.shape} (converted to f32)")
+            else:
+                print(f"[{self.node_id}] Forward: tensor shape={input_data.shape}")
 
         # Run real inference
         inference_start = time.perf_counter()
