@@ -288,7 +288,11 @@ class PipelinedNode:
         })
 
     async def stats_handler(self, request):
-        return web.json_response({
+        return web.json_response(self.get_stats())
+
+    def get_stats(self) -> dict:
+        """Get pipeline statistics"""
+        return {
             'node_id': self.node_id,
             'requests_processed': self.stats.requests_processed,
             'total_compute_ms': self.stats.total_compute_ms,
@@ -296,8 +300,8 @@ class PipelinedNode:
             'total_idle_ms': self.stats.total_idle_ms,
             'efficiency': f"{self.stats.efficiency:.1f}%",
             'avg_queue_depth': self.stats.avg_queue_depth,
-            'current_queue_depth': self.input_queue.qsize(),
-        })
+            'queue_depth': self.input_queue.qsize(),
+        }
 
     async def register_peer_handler(self, request):
         data = await request.json()
