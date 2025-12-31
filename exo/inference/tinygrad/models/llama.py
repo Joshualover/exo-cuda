@@ -315,12 +315,16 @@ def convert_from_huggingface(weights: Dict[str, Tensor], model: Transformer, n_h
 
 def fix_bf16(weights: Dict[Any, Tensor]):
   # USE_FP32=1 forces everything to f32 for devices without fp16 support (e.g., older OpenCL like FirePro D500)
-  # We do the conversion on CPU first to avoid GPU kernels that use bf16/fp16
+  # We do the conversion on CPU using llvm_bf16_cast to avoid GPU kernels that use bf16/fp16
   if getenv("USE_FP32", 0):
     result = {}
     for k, v in weights.items():
-      if v.dtype in (dtypes.bfloat16, dtypes.float16):
-        # Convert on CPU first, then move to target device
+      if v.dtype == dtypes.bfloat16:
+        # Use llvm_bf16_cast for bf16, then transfer to target device
+        cpu_tensor = v.llvm_bf16_cast(dtypes.float32)
+        result[k] = cpu_tensor.to(Device.DEFAULT)
+      elif v.dtype == dtypes.float16:
+        # For fp16, cast on CPU then transfer
         cpu_tensor = v.to("CLANG").cast(dtypes.float32)
         result[k] = cpu_tensor.to(Device.DEFAULT)
       else:
