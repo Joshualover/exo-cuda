@@ -398,6 +398,7 @@ def main():
     parser.add_argument('--n-layers', type=int, default=16, help='Total layers')
     parser.add_argument('--port', type=int, default=8090, help='Port')
     parser.add_argument('--queue-size', type=int, default=8, help='Pipeline queue size')
+    parser.add_argument('--idle-agent', action='store_true', help='Enable idle agent for background knowledge building')
     args = parser.parse_args()
 
     node = PipelinedNode(
@@ -411,8 +412,35 @@ def main():
 
     async def run():
         await node.start()
+
+        # Start idle agent if enabled
+        idle_agent = None
+        if args.idle_agent:
+            try:
+                from .idle_agent import IdleAgent
+
+                async def inference_fn(prompt):
+                    # Use node's inference for background work
+                    tokens = [128000] + [ord(c) % 1000 for c in prompt[:20]]
+                    result = await node._do_inference(np.array([tokens]))
+                    return f"Processed: {prompt[:50]}"
+
+                def check_idle():
+                    return node.input_queue.empty()
+
+                idle_agent = IdleAgent(inference_fn, check_idle)
+                await idle_agent.start()
+                print("[Pipeline] Idle agent enabled - GPU will never waste cycles!")
+            except Exception as e:
+                print(f"[Pipeline] Idle agent failed to start: {e}")
+
+        # Print periodic stats
         while True:
-            await asyncio.sleep(3600)
+            await asyncio.sleep(60)
+            stats = node.get_stats()
+            print(f"[Pipeline] Stats: {stats}")
+            if idle_agent:
+                print(f"[IdleAgent] Stats: {idle_agent.get_stats()}")
 
     asyncio.run(run())
 
