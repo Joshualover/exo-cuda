@@ -5,7 +5,10 @@ from collections import OrderedDict
 
 
 # https://github.com/facebookresearch/llama/blob/1076b9c51c77ad06e9d7ba8a4c6df775741732bd/llama/model.py#L47
-def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, dtype=dtypes.half, rope_scaling: Optional[Dict[str, float]] = None) -> Tensor:
+def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, dtype=None, rope_scaling: Optional[Dict[str, float]] = None) -> Tensor:
+  # USE_FP32=1 forces f32 for devices without fp16 support
+  if dtype is None:
+    dtype = dtypes.float32 if getenv("USE_FP32", 0) else dtypes.half
   freqs = 1.0/(theta**(Tensor.arange(0, dim, 2)[:(dim // 2)]/dim))
 
   if rope_scaling:
@@ -314,10 +317,26 @@ def convert_from_huggingface(weights: Dict[str, Tensor], model: Transformer, n_h
 
 
 def fix_bf16(weights: Dict[Any, Tensor]):
+  # USE_FP32=1 forces everything to f32 for devices without fp16 support (e.g., older OpenCL like FirePro D500)
+  # We do the conversion on CPU using llvm_bf16_cast to avoid GPU kernels that use bf16/fp16
+  if getenv("USE_FP32", 0):
+    result = {}
+    for k, v in weights.items():
+      if v.dtype == dtypes.bfloat16:
+        # Use llvm_bf16_cast for bf16, then transfer to target device
+        cpu_tensor = v.llvm_bf16_cast(dtypes.float32)
+        result[k] = cpu_tensor.to(Device.DEFAULT)
+      elif v.dtype == dtypes.float16:
+        # For fp16, cast on CPU then transfer
+        cpu_tensor = v.to("CLANG").cast(dtypes.float32)
+        result[k] = cpu_tensor.to(Device.DEFAULT)
+      else:
+        result[k] = v
+    return result
   if Device.DEFAULT == "CLANG":
     # TODO: without casting to float16, 70B llama OOM on tinybox.
     return {
-      k: (v.llvm_bf16_cast(dtypes.float32).to(v.device) if v.dtype == dtypes.bfloat16 else v) 
+      k: (v.llvm_bf16_cast(dtypes.float32).to(v.device) if v.dtype == dtypes.bfloat16 else v)
       for k, v in weights.items()
     }
   if getenv("SUPPORT_BF16", 1):

@@ -24,6 +24,111 @@ exo: Run your own AI cluster at home with everyday devices. Maintained by [exo l
 
 ---
 
+## NVIDIA CUDA Support (exo-cuda fork)
+
+This fork restores **full NVIDIA CUDA support** via the tinygrad inference engine, enabling distributed inference across NVIDIA GPUs. This is the first verified working distributed CUDA inference implementation for exo.
+
+### Quick Start for NVIDIA GPUs
+
+```bash
+# Clone this repo
+git clone https://github.com/Scottcjn/exo-cuda.git
+cd exo-cuda
+
+# Create venv and install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+# Upgrade tinygrad to latest for best CUDA support
+pip install --upgrade git+https://github.com/tinygrad/tinygrad.git
+
+# Start with tinygrad (CUDA) backend
+exo --inference-engine tinygrad --chatgpt-api-port 8001 --disable-tui
+```
+
+### System Requirements
+
+| Requirement | Details |
+|-------------|---------|
+| **OS** | Ubuntu 22.04/24.04, Debian 12+ |
+| **Python** | 3.10+ (3.12+ recommended) |
+| **NVIDIA Driver** | 525+ (verify with `nvidia-smi`) |
+| **CUDA Toolkit** | 12.0+ (install: `apt install nvidia-cuda-toolkit`) |
+| **GPU Memory** | Minimum 8GB per node for small models |
+
+### Verified Hardware (December 2024)
+
+| Hardware | GPU | Memory | Status |
+|----------|-----|--------|--------|
+| Dell PowerEdge C4130 | Tesla V100-SXM2 | 16GB | ✅ Working |
+| Dell PowerEdge C4130 | Tesla M40 | 24GB | ✅ Working |
+| Multi-node cluster | Mixed V100/M40 | 40GB+ | ✅ Working |
+
+### Multi-Node Cluster Setup
+
+#### Node 1 (Primary):
+```bash
+exo --inference-engine tinygrad --chatgpt-api-port 8001 --disable-tui
+```
+
+#### Node 2+:
+```bash
+exo --inference-engine tinygrad --disable-tui
+```
+
+Nodes auto-discover via UDP broadcast. For manual peer configuration:
+```bash
+exo --inference-engine tinygrad --discovery-module manual \
+    --discovery-config-path /path/to/peers.json
+```
+
+### API Usage
+
+```bash
+# Test inference
+curl http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama-3.2-1b",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 50
+  }'
+```
+
+### Supported Models
+
+All tinygrad-compatible models work, including:
+- Llama 3.x (1B, 3B, 8B, 70B, 405B)
+- DeepSeek (R1, Coder, V3)
+- Qwen 2.5 (0.5B - 72B)
+- Mistral, Gemma, Phi, and more
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `nvcc not found` | Install CUDA toolkit: `apt install nvidia-cuda-toolkit` |
+| `OpenCL exp2 error` | Upgrade tinygrad: `pip install --upgrade git+https://github.com/tinygrad/tinygrad.git` |
+| `No GPU detected` | Verify driver: `nvidia-smi`, check CUDA: `nvcc --version` |
+| `Out of memory` | Use smaller model or add more nodes to cluster |
+
+### Environment Variables
+
+```bash
+DEBUG=2              # Enable debug logging (0-9)
+TINYGRAD_DEBUG=2     # Tinygrad-specific debug (1-6)
+CUDA_VISIBLE_DEVICES=0,1  # Limit GPU visibility
+```
+
+### Maintained By
+
+[Elyan Labs](https://elyanlabs.ai) - scott@elyanlabs.ai
+
+Based on original [exo](https://github.com/exo-explore/exo) by exo labs.
+
+---
+
 Forget expensive NVIDIA GPUs, unify your existing devices into one powerful GPU: iPhone, iPad, Android, Mac, Linux, pretty much any device!
 
 <div align="center">
